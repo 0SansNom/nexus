@@ -1,0 +1,51 @@
+version: '3.8'
+
+# Development overrides - use with: docker-compose -f docker-compose.yml -f docker-compose.dev.yml up
+
+services:
+  redis:
+    ports:
+      - "6379:6379"  # Expose on all interfaces for local development
+
+  coordinator:
+    build:
+      context: ./coordinator
+      dockerfile: Dockerfile.dev
+    ports:
+      - "3000:3000"  # Expose on all interfaces
+    volumes:
+      - ./coordinator:/app  # Mount source for hot reload
+      - coordinator_data:/data
+    environment:
+      - GO_ENV=development
+
+  email_agent:
+    build:
+      context: ./agents
+      dockerfile: email_agent/Dockerfile.dev
+    volumes:
+      - ./agents:/app
+    environment:
+      - PYTHONDONTWRITEBYTECODE=1
+      - PYTHONUNBUFFERED=1
+
+  calendar_agent:
+    build:
+      context: ./agents
+      dockerfile: calendar_agent/Dockerfile.dev
+    volumes:
+      - ./agents:/app
+    environment:
+      - PYTHONDONTWRITEBYTECODE=1
+      - PYTHONUNBUFFERED=1
+
+  memory_agent:
+    build:
+      context: ./agents
+      dockerfile: memory_agent/Dockerfile.dev
+    volumes:
+      - ./agents:/app
+      - memory_agent_data:/data
+    environment:
+      - PYTHONDONTWRITEBYTECODE=1
+      - PYTHONUNBUFFERED=1

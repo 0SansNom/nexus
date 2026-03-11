@@ -1,0 +1,135 @@
+version: '3.8'
+
+services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+
+  coordinator:
+    build:
+      context: ./coordinator
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      - SERVER_ADDR=0.0.0.0:3000
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - DATABASE_PATH=/data/nexus.db
+      - DATABASE_KEY=${DATABASE_KEY}
+      - LLM_PROVIDER=${LLM_PROVIDER:-anthropic}
+      - LLM_MODEL=${LLM_MODEL:-claude-sonnet-4-5-20250929}
+      - LLM_API_KEY=${LLM_API_KEY}
+      - NEXUS_API_KEY=${NEXUS_API_KEY}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:3000}
+    volumes:
+      - coordinator_data:/data
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+
+  email_agent:
+    build:
+      context: ./agents
+      dockerfile: email_agent/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+      coordinator:
+        condition: service_started
+    environment:
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379
+      - COORDINATOR_URL=http://coordinator:3000
+      - LLM_API_KEY=${LLM_API_KEY}
+      - LLM_MODEL=${LLM_MODEL:-claude-sonnet-4-5-20250929}
+      - IMAP_HOST=${IMAP_HOST}
+      - IMAP_PORT=${IMAP_PORT:-993}
+      - SMTP_HOST=${SMTP_HOST}
+      - SMTP_PORT=${SMTP_PORT:-587}
+      - EMAIL_USERNAME=${EMAIL_USERNAME}
+      - EMAIL_PASSWORD=${EMAIL_PASSWORD}
+      - EMAIL_FROM=${EMAIL_FROM}
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+
+  calendar_agent:
+    build:
+      context: ./agents
+      dockerfile: calendar_agent/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+      coordinator:
+        condition: service_started
+    environment:
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379
+      - COORDINATOR_URL=http://coordinator:3000
+      - LLM_API_KEY=${LLM_API_KEY}
+      - LLM_MODEL=${LLM_MODEL:-claude-sonnet-4-5-20250929}
+      - GOOGLE_CALENDAR_ID=${GOOGLE_CALENDAR_ID:-primary}
+    volumes:
+      - ./credentials:/app/credentials:ro
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+
+  memory_agent:
+    build:
+      context: ./agents
+      dockerfile: memory_agent/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+      coordinator:
+        condition: service_started
+    environment:
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379
+      - COORDINATOR_URL=http://coordinator:3000
+      - LLM_API_KEY=${LLM_API_KEY}
+      - LLM_MODEL=${LLM_MODEL:-claude-sonnet-4-5-20250929}
+      - CHROMA_PERSIST_DIR=/data/chroma
+    volumes:
+      - memory_agent_data:/data
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+
+volumes:
+  redis_data:
+  coordinator_data:
+  memory_agent_data:
+
+networks:
+  default:
+    driver: bridge

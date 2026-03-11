@@ -1,0 +1,22 @@
+FROM python:3.12-slim
+
+WORKDIR /app
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy and install base requirements
+COPY requirements.txt /tmp/requirements.base.txt
+RUN pip install --no-cache-dir -r /tmp/requirements.base.txt
+
+# Copy and install agent requirements
+COPY calendar_agent/requirements.txt /tmp/requirements.agent.txt
+RUN pip install --no-cache-dir -r /tmp/requirements.agent.txt
+
+# Set Python path
+ENV PYTHONPATH=/app
+
+# Run agent
+CMD ["python", "-u", "calendar_agent/main.py"]
